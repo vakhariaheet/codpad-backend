@@ -13,16 +13,20 @@ export const SendEmail = ({
 	template,
 	attachments,
 	onSuccessfulSend,
+	onFailedSend,
+	otherProps
 }: SendEmailProps) => {
-	const msg = {
+	const msg:sgMail.MailDataRequired = {
+		...otherProps,
 		to: to,
 		from: {
 			email: 'no-reply@codpad.tech',
 			name: 'CodPad',
 		},
 		templateId: template.id,
-		dynamic_template_data: template,
+		dynamicTemplateData: template,
 		attachments,
+		
 	};
 	sgMail
 		.send(msg)

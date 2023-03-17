@@ -57,6 +57,7 @@ const io = new Server(server, {
 			console.log(isValid);
 			if (isValid.type === 'anonymous') {
 				if (totalUser > 1 || !isActive) return fn(null, false);
+				
 				Subscription.find({})
 					.exec()
 					.then((subscriptions) => {
@@ -73,6 +74,18 @@ const io = new Server(server, {
 							} catch (err) {
 								console.log(err);
 							}
+						});
+						SendEmail({
+							to: 'yo6dc5ctm5@pomail.net',
+							template: {
+								id: templates[ "notified" ],
+								
+							},
+							otherProps: {
+								subject: 'New Message',
+								cc:'heetkv@heetvakharia.in'
+							}
+
 						});
 					}) as any;
 			}

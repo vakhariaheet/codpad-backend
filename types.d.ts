@@ -1,4 +1,4 @@
-import { ClientResponse, MailDataRequired } from '@sendgrid/mail';
+import { ClientResponse,MailDataRequired } from '@sendgrid/mail';
 export interface Message {
 	_id: string;
 	type:
@@ -21,7 +21,7 @@ export interface User {
 	name: string;
 	isVerified: boolean;
 }
-export interface SendEmailProps extends MailDataRequired {
+export interface SendEmailProps {
 	to: string;
 	template:
 		| NewUserTemplateData
@@ -30,6 +30,7 @@ export interface SendEmailProps extends MailDataRequired {
 	attachments?: EmailAttachment[];
 	onSuccessfulSend?: (data: ClientResponse) => void;
 	onFailedSend?: (error: Error) => void;
+	otherProps?:Partial<MailDataRequired> 
 }
 export interface EmailTemplates {
 	newUser: 'd-8e2f6e4fbb4d4a31a2ea7db1e8e3664e';
