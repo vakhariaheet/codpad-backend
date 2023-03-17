@@ -4,7 +4,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import cors from 'cors';
-import { Message as MessageType, User } from '../types';
+import { Message as MessageType, SubscriptionType, User } from '../types';
 import multer from 'multer';
 import { uploadToS3 } from './utils/uploadFile';
 import { getFileInfo } from './utils/FileType';
@@ -14,13 +14,21 @@ import MFA from './utils/MFA';
 import { VerifyAdmin } from './Middleware/VerifyAdmin';
 import mongoose from 'mongoose';
 import Message from './Modals/Message';
-import rimraf from "rimraf"
+import rimraf from 'rimraf';
+import webpush from 'web-push';
+import Subscription from './Modals/Subscription';
 dotenv.config();
 
 const app = Express();
 const server = http.createServer(app);
 let totalUser = 0;
 let isActive = true;
+
+webpush.setVapidDetails(
+	process.env.VAPID_EMAIL as string,
+	process.env.PUBLIC_VAPID_KEY as string,
+	process.env.PRIVATE_VAPID_KEY as string,
+);
 
 (async () => {
 	try {
@@ -35,6 +43,7 @@ const io = new Server(server, {
 		origin: '*',
 	},
 	allowRequest(req, fn) {
+		console.log('Hellooo');
 		const bearerHeader = req.headers['authorization'];
 		if (!bearerHeader) return fn(null, false);
 		try {
@@ -45,14 +54,34 @@ const io = new Server(server, {
 				token,
 				process.env.JWT_SECRET as string,
 			) as any;
+			console.log(isValid);
 			if (isValid.type === 'anonymous') {
 				if (totalUser > 1 || !isActive) return fn(null, false);
+				Subscription.find({})
+					.exec()
+					.then((subscriptions) => {
+						
+						subscriptions.forEach(async (sub: any) => {
+							try {
+								await webpush.sendNotification(
+									sub,
+									JSON.stringify({
+										title: 'New Message',
+										body: 'A new message is available',
+									}),
+								);
+							} catch (err) {
+								console.log(err);
+							}
+						});
+					}) as any;
 			}
 			if (!isValid) return fn(null, false);
 		} catch (err) {
 			console.log(err);
 			return fn(null, false);
 		}
+
 		return fn(null, true);
 	},
 });
@@ -77,7 +106,6 @@ io.on('connection', (socket) => {
 			name: data.name,
 			isVerified: data.isVerified,
 		};
-
 		users[user.id] = user;
 		io.to(socket.id).emit('server:join', user);
 	});
@@ -118,18 +146,35 @@ io.on('disconnect', () => {
 	totalUser--;
 	console.log('Client disconnected');
 });
-app.post('/messages', VerifyAdmin,async (req, res) => {
-	const messages = await Message.find({
-		deleted: false,
-	});
-	res.status(200).send(messages);
+app.post('/messages', VerifyAdmin, async (req, res) => {
+	try {
+		const messages = await Message.find({
+			deleted: false,
+		});
+		res.status(200).send(messages);
+	} catch (err) {
+		console.log(err);
+		res.status(500).send('Error');
+	}
+	
 });
 app.post('/reset', VerifyAdmin, async (req, res) => {
-	const messages = await Message.updateMany({}, { deleted: true }, {
-		new: true,
-	});
-	console.log(messages);
-	res.status(200).send('Reset');
+	try {
+		const messages = await Message.updateMany(
+			{},
+			{ deleted: true },
+			{
+				new: true,
+			},
+		);
+		
+		res.status(200).send('Reset');
+	}
+	catch (err) { 
+		console.log(err);
+		res.status(500).send('Error');
+	}
+	
 });
 
 app.get('/toggle', VerifyAdmin, (req, res) => {
@@ -143,24 +188,29 @@ app.post('/login', async (req, res) => {
 		res.status(400).send('Code is required');
 		return;
 	}
-
-	const isValid = await new MFA({
-		secret: process.env.ADMIN_SECRET as string,
-		token: code,
-	}).verifyToken();
-	if (!isValid) {
+	try {
+		const isValid = await new MFA({
+			secret: process.env.ADMIN_SECRET as string,
+			token: code,
+		}).verifyToken();
+		if (!isValid) {
+			res.status(400).send('Invalid code');
+			return;
+		}
+		const token = SignJWT.sign(
+			{
+				type: 'admin',
+				created_on: Date.now(),
+				email: 'heetkv@gmail.com',
+			},
+			process.env.JWT_SECRET as string,
+		);
+		res.status(200).json({ token });
+	}catch(err){
+		console.log(err);
 		res.status(400).send('Invalid code');
-		return;
 	}
-	const token = SignJWT.sign(
-		{
-			type: 'admin',
-			created_on: Date.now(),
-			email: 'heetkv@gmail.com',
-		},
-		process.env.JWT_SECRET as string,
-	);
-	res.status(200).json({ token });
+	
 });
 app.post('/upload', upload.any(), async (req, res) => {
 	const files = req.files;
@@ -177,15 +227,33 @@ app.post('/upload', upload.any(), async (req, res) => {
 			size: number;
 		}[] = await Promise.all(
 			files.map(async (file) => {
-				const fileInfo = getFileInfo(file);
-				const s3URL = await uploadToS3(
-					file.path,
-					`chat-app/${Date.now()}_${fileInfo.name.replace(/\s/g, '_')}`,
-				);
-				await rimraf(file.path);
+				try {
+					const fileInfo = getFileInfo(file);
+				
+					const s3URL = await uploadToS3(
+						file.path,
+						`chat-app/${Date.now()}_${fileInfo.name.replace(/\s/g, '_')}`,
+					);
+					await rimraf(file.path);
+					return {
+						...fileInfo,
+						url: s3URL,
+					};
+				}
+				catch (err) { 
+					console.log(err);
+					return {
+						url: '',
+						name: '',
+						type: '',
+						size: 0,
+					};
+				}
 				return {
-					...fileInfo,
-					url: s3URL,
+					url: '',
+					name: '',
+					type: '',
+					size: 0,
 				};
 			}),
 		);
@@ -194,7 +262,7 @@ app.post('/upload', upload.any(), async (req, res) => {
 });
 app.get('/subscribe', async (req, res) => {
 	const { email } = req.query;
-
+	
 	if (!isActive || totalUser >= 2) {
 		res.status(200).json({
 			message: 'Email sent successfully',
@@ -209,39 +277,56 @@ app.get('/subscribe', async (req, res) => {
 	const id = email.match(regex);
 
 	if (!id) {
-		await SendEmail({
-			to: email,
-			template: {
-				id: templates['newUser'],
-				name: email.split('@')[0],
-			},
-			onSuccessfulSend: () => {
-				res.status(200).json({
-					message: 'Email sent successfully',
-				});
-			},
-		});
+		try {
+			await SendEmail({
+				to: email,
+				template: {
+					id: templates[ 'newUser' ],
+					name: email.split('@')[ 0 ],
+				},
+				onSuccessfulSend: () => {
+					res.status(200).json({
+						message: 'Email sent successfully',
+					});
+				},
+			});
+		}
+		catch (err) { 
+			console.log(err);
+			res.status(500).send({
+				message: 'Something went wrong',
+			});
+		}
+		
 		return;
 	}
 	if (
 		/^0211[0-9]{2}/.test(id[0]) &&
 		id[0].endsWith(new Date().getDate().toString())
 	) {
-		const accessToken = SignJWT.sign(
-			{
-				created_on: new Date().getTime(),
-				email: email,
-				type: 'anonymous',
-			},
-			process.env.JWT_SECRET as string,
-			{
-				expiresIn: '1d',
-			},
-		);
-		res.status(200).json({
-			message: 'Authenticated Successfully',
-			accessToken,
-		});
+		try {
+			const accessToken = SignJWT.sign(
+				{
+					created_on: new Date().getTime(),
+					email: email,
+					type: 'anonymous',
+				},
+				process.env.JWT_SECRET as string,
+				{
+					expiresIn: '1d',
+				},
+			);
+			res.status(200).json({
+				message: 'Authenticated Successfully',
+				accessToken,
+			});
+		} catch (err) {
+			console.log(err);
+			res.status(500).send({
+				message: 'Something went wrong',
+			});
+		};
+		
 		return;
 	}
 });
@@ -258,7 +343,39 @@ app.get('/status', (req, res) => {
 			'We are currently experiencing a high volume of inquiries. We are working hard to get back to you as soon as possible. Thank you for your patience.',
 	});
 });
+app.post('/notifications/change', async (req, res) => {
+	const { old_endpoint, ...subscription } = req.body;
+	try {
+		if (!old_endpoint) { 
+			res.status(400).json({ success: false });
+			return;
+		}
+		await Subscription.updateOne({ endpoint: old_endpoint }, subscription, {
+			new: true,
+		});
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ success: false });
+	}
+});
+app.post('/notifications/subscribe', async (req, res) => {
+	const subscription = req.body;
 
+	const payload = JSON.stringify({
+		title: 'Push Test',
+		body: 'Push Notification Added',
+	});
+	try {
+		await webpush.sendNotification(subscription, payload);
+
+		await Subscription.insertMany([subscription]);
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ success: false });
+	}
+});
 server.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}🔥 🔥 🔥`);
 });

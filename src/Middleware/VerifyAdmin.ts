@@ -9,7 +9,7 @@ export const VerifyAdmin = async (req: Request, res: Response, next: NextFunctio
     const bearerToken = bearer[ 1 ];  
     try {
         const decoded = SignJWT.verify(bearerToken, process.env.JWT_SECRET as string) as any;
-        if (decoded && decoded.type === "admin") {
+        if (decoded && (decoded.type === "admin" || decoded.type==="anonymous") ) {
             next();
         }
         else {
