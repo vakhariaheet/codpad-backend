@@ -142,6 +142,16 @@ io.on('connection', (socket) => {
 			delete users[socket.id];
 		}
 	});
+	socket.on('client:delete', async (id) => { 
+		await Message.updateOne(
+			{ _id:id },
+			{
+				deleted: true,
+			},
+		);	
+		console.log('Deleted');
+		io.emit('server:delete', id);
+	})
 	socket.on('client:typing', (data) => {
 		socket.broadcast.emit('server:typing', data);
 	});
@@ -247,7 +257,7 @@ app.post('/upload', upload.any(), async (req, res) => {
 						file.path,
 						`chat-app/${Date.now()}_${fileInfo.name.replace(/\s/g, '_')}`,
 					);
-					await rimraf(file.path);
+					// await rimraf(file.path);
 					return {
 						...fileInfo,
 						url: s3URL,
@@ -262,12 +272,6 @@ app.post('/upload', upload.any(), async (req, res) => {
 						size: 0,
 					};
 				}
-				return {
-					url: '',
-					name: '',
-					type: '',
-					size: 0,
-				};
 			}),
 		);
 		return res.status(200).json(uploadedFiles);
