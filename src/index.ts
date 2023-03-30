@@ -58,36 +58,36 @@ const io = new Server(server, {
 			if (isValid.type === 'anonymous') {
 				if (totalUser > 1 || !isActive) return fn(null, false);
 				
-				Subscription.find({})
-					.exec()
-					.then((subscriptions) => {
+				// Subscription.find({})
+				// 	.exec()
+				// 	.then((subscriptions) => {
 						
-						subscriptions.forEach(async (sub: any) => {
-							try {
-								await webpush.sendNotification(
-									sub,
-									JSON.stringify({
-										title: 'New Message',
-										body: 'A new message is available',
-									}),
-								);
-							} catch (err) {
-								console.log(err);
-							}
-						});
-						SendEmail({
-							to: 'yo6dc5ctm5@pomail.net',
-							template: {
-								id: templates[ "notified" ],
+				// 		subscriptions.forEach(async (sub: any) => {
+				// 			try {
+				// 				await webpush.sendNotification(
+				// 					sub,
+				// 					JSON.stringify({
+				// 						title: 'New Message',
+				// 						body: 'A new message is available',
+				// 					}),
+				// 				);
+				// 			} catch (err) {
+				// 				console.log(err);
+				// 			}
+				// 		});
+				// 		SendEmail({
+				// 			to: 'yo6dc5ctm5@pomail.net',
+				// 			template: {
+				// 				id: templates[ "notified" ],
 								
-							},
-							otherProps: {
-								subject: 'New Message',
-								cc:'heetkv@heetvakharia.in'
-							}
+				// 			},
+				// 			otherProps: {
+				// 				subject: 'New Message',
+				// 				cc:'heetkv@heetvakharia.in'
+				// 			}
 
-						});
-					}) as any;
+				// 		});
+				// 	}) as any;
 			}
 			if (!isValid) return fn(null, false);
 		} catch (err) {
@@ -170,11 +170,22 @@ io.on('disconnect', () => {
 	console.log('Client disconnected');
 });
 app.post('/messages', VerifyAdmin, async (req, res) => {
+	const {startIndex = 0, limit = 10} = req.body;
 	try {
 		const messages = await Message.find({
 			deleted: false,
+
+		}).sort({ createdAt: -1 }).skip(startIndex).limit(limit).exec();
+		const total = await Message.countDocuments({
+			deleted: false,
+		}).exec();
+		res.status(200).send({
+			messages:messages.reverse(),
+			total,
+			limit,
+			startIndex,
+			nextIndex: startIndex + limit,
 		});
-		res.status(200).send(messages);
 	} catch (err) {
 		console.log(err);
 		res.status(500).send('Error');
