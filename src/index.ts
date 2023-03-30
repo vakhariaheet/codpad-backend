@@ -17,6 +17,7 @@ import Message from './Modals/Message';
 import rimraf from 'rimraf';
 import webpush from 'web-push';
 import Subscription from './Modals/Subscription';
+import Log from './Modals/Log';
 dotenv.config();
 
 const app = Express();
@@ -43,51 +44,56 @@ const io = new Server(server, {
 		origin: '*',
 	},
 	allowRequest(req, fn) {
-		console.log('Hellooo');
+		
 		const bearerHeader = req.headers['authorization'];
 		if (!bearerHeader) return fn(null, false);
 		try {
 			const token = bearerHeader.split(' ')[1];
 			if (!token) return fn(null, false);
-			console.log(token);
+			
 			const isValid = SignJWT.verify(
 				token,
 				process.env.JWT_SECRET as string,
 			) as any;
-			console.log(isValid);
+
 			if (isValid.type === 'anonymous') {
 				if (totalUser > 1 || !isActive) return fn(null, false);
-				
-				Subscription.find({})
-					.exec()
-					.then((subscriptions) => {
+				Log.create({
+					message: 'Anonymous user logged in',
+					type: 'login',
+					user: isValid.id,
+					timestamp: new Date().getTime(),
+				});
+				// Subscription.find({})
+				// 	.exec()
+				// 	.then((subscriptions) => {
 						
-						subscriptions.forEach(async (sub: any) => {
-							try {
-								await webpush.sendNotification(
-									sub,
-									JSON.stringify({
-										title: 'New Message',
-										body: 'A new message is available',
-									}),
-								);
-							} catch (err) {
-								console.log(err);
-							}
-						});
-						SendEmail({
-							to: 'yo6dc5ctm5@pomail.net',
-							template: {
-								id: templates[ "notified" ],
+				// 		subscriptions.forEach(async (sub: any) => {
+				// 			try {
+				// 				await webpush.sendNotification(
+				// 					sub,
+				// 					JSON.stringify({
+				// 						title: 'New Message',
+				// 						body: 'A new message is available',
+				// 					}),
+				// 				);
+				// 			} catch (err) {
+				// 				console.log(err);
+				// 			}
+				// 		});
+				// 		SendEmail({
+				// 			to: 'yo6dc5ctm5@pomail.net',
+				// 			template: {
+				// 				id: templates[ "notified" ],
 								
-							},
-							otherProps: {
-								subject: 'New Message',
-								cc:'heetkv@heetvakharia.in'
-							}
+				// 			},
+				// 			otherProps: {
+				// 				subject: 'New Message',
+				// 				cc:'heetkv@heetvakharia.in'
+				// 			}
 
-						});
-					}) as any;
+				// 		});
+				// 	}) as any;
 			}
 			if (!isValid) return fn(null, false);
 		} catch (err) {
@@ -105,21 +111,22 @@ app.use(cors());
 const PORT = process.env.PORT || 3000;
 
 let messages: MessageType[] = [];
-let users: {
-	[id: string]: User;
-} = {};
+let users: User[] = [];
 io.connectTimeout(2 * 60 * 1000);
 
 io.on('connection', (socket) => {
-	console.log('Client connected');
+	
 	totalUser++;
 	socket.on('client:join', (data) => {
+		
 		const user: User = {
 			id: data.id || socket.id,
 			name: data.name,
 			isVerified: data.isVerified,
+			socketId: socket.id,
 		};
-		users[user.id] = user;
+		users.push(user);
+		console.log(`Client connected ${user.id}`);
 		io.to(socket.id).emit('server:join', user);
 	});
 	socket.on('client:message', async (message) => {
@@ -134,12 +141,21 @@ io.on('connection', (socket) => {
 		await Message.insertMany([messageObj]);
 		io.emit('server:message', messageObj);
 	});
-	socket.on('disconnect', () => {
-		console.log('Client disconnected');
+	socket.on('disconnect',async () => {
+		const user = users.find((user) => user.socketId === socket.id);
+		console.log(`Client disconnected ${user?.id}`);
 		totalUser--;
-		if (users[socket.id]) {
-			io.emit('server:leave', users[socket.id]);
-			delete users[socket.id];
+		
+		
+		if (user) {
+			await Log.create({
+				message: `${user?.id} user logged out`,
+				type: 'logout',
+				user: user?.id,
+				timestamp: new Date().getTime(),
+			})
+			io.emit('server:leave', user);
+			users = users.filter((user:User) => user.socketId !== socket.id);
 		}
 	});
 	socket.on('client:delete', async (id) => { 
@@ -161,6 +177,7 @@ io.on('connection', (socket) => {
 	socket.on('emergency:exit', () => {
 		isActive = false;
 		io.emit('server:inactive');
+		io.emit('server:emergency');
 		console.log('Emergency exit');
 		socket.disconnect();
 	});
@@ -171,10 +188,12 @@ io.on('disconnect', () => {
 });
 app.post('/messages', VerifyAdmin, async (req, res) => {
 	try {
-		const messages = await Message.find({
+		const messages:MessageType[] = await Message.find({
 			deleted: false,
-		});
-		res.status(200).send(messages);
+
+		}).sort({ createdAt: -1 }).limit(100).exec();
+
+		res.status(200).send(messages.reverse());
 	} catch (err) {
 		console.log(err);
 		res.status(500).send('Error');
@@ -183,7 +202,7 @@ app.post('/messages', VerifyAdmin, async (req, res) => {
 });
 app.post('/reset', VerifyAdmin, async (req, res) => {
 	try {
-		const messages = await Message.updateMany(
+		await Message.updateMany(
 			{},
 			{ deleted: true },
 			{
@@ -327,15 +346,18 @@ app.get('/subscribe', async (req, res) => {
 					created_on: new Date().getTime(),
 					email: email,
 					type: 'anonymous',
+					id: 'Anonymous',
 				},
 				process.env.JWT_SECRET as string,
 				{
 					expiresIn: '1d',
 				},
 			);
+		
 			res.status(200).json({
 				message: 'Authenticated Successfully',
 				accessToken,
+				id: 'Anonymous',
 			});
 		} catch (err) {
 			console.log(err);
@@ -345,6 +367,11 @@ app.get('/subscribe', async (req, res) => {
 		};
 		
 		return;
+	}
+	else {
+		return res.status(200).json({
+			message: 'Email sent successfully',
+		});
 	}
 });
 app.get('/status', (req, res) => {

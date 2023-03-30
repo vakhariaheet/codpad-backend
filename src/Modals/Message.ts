@@ -1,5 +1,5 @@
 import {Schema,model} from "mongoose";
-
+import { Message } from "../../types";
 const MessageSchema = new Schema({
     sender: {
         type: String,
@@ -25,6 +25,6 @@ const MessageSchema = new Schema({
     timestamps: true
 });
 
-const Message = model("Message", MessageSchema);
 
-export default Message;
+
+export default model<Message>("Message", MessageSchema);

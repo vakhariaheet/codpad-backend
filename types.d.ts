@@ -20,6 +20,7 @@ export interface User {
 	id: string;
 	name: string;
 	isVerified: boolean;
+	socketId: string;
 }
 export interface SendEmailProps {
 	to: string;
