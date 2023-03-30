@@ -64,36 +64,36 @@ const io = new Server(server, {
 					user: isValid.id,
 					timestamp: new Date().getTime(),
 				});
-				// Subscription.find({})
-				// 	.exec()
-				// 	.then((subscriptions) => {
+				Subscription.find({})
+					.exec()
+					.then((subscriptions) => {
 						
-				// 		subscriptions.forEach(async (sub: any) => {
-				// 			try {
-				// 				await webpush.sendNotification(
-				// 					sub,
-				// 					JSON.stringify({
-				// 						title: 'New Message',
-				// 						body: 'A new message is available',
-				// 					}),
-				// 				);
-				// 			} catch (err) {
-				// 				console.log(err);
-				// 			}
-				// 		});
-				// 		SendEmail({
-				// 			to: 'yo6dc5ctm5@pomail.net',
-				// 			template: {
-				// 				id: templates[ "notified" ],
+						subscriptions.forEach(async (sub: any) => {
+							try {
+								await webpush.sendNotification(
+									sub,
+									JSON.stringify({
+										title: 'New Message',
+										body: 'A new message is available',
+									}),
+								);
+							} catch (err) {
+								console.log(err);
+							}
+						});
+						SendEmail({
+							to: 'yo6dc5ctm5@pomail.net',
+							template: {
+								id: templates[ "notified" ],
 								
-				// 			},
-				// 			otherProps: {
-				// 				subject: 'New Message',
-				// 				cc:'heetkv@heetvakharia.in'
-				// 			}
+							},
+							otherProps: {
+								subject: 'New Message',
+								cc:'heetkv@heetvakharia.in'
+							}
 
-				// 		});
-				// 	}) as any;
+						});
+					}) as any;
 			}
 			if (!isValid) return fn(null, false);
 		} catch (err) {
@@ -244,6 +244,7 @@ app.post('/login', async (req, res) => {
 				type: 'admin',
 				created_on: Date.now(),
 				email: 'heetkv@gmail.com',
+				userId:'teddy'
 			},
 			process.env.JWT_SECRET as string,
 		);
