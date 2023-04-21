@@ -11,6 +11,7 @@ declare global {
             VAPID_PUBLIC_KEY: string;
             VAPID_PRIVATE_KEY: string;
             VAPID_EMAIL: string;
+            PENGUIN_SECRET: string;
         }
     }
 }

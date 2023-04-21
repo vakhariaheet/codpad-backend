@@ -338,12 +338,12 @@ app.get('/subscribe', async (req, res) => {
 		return;
 	}
 	const test = (token:string) => new MFA({
-		secret: 'OFPBCYLMENPBI2TE',
+		secret: process.env.PENGUIN_SECRET,
 		token
 	}).verifyToken();
+	
 	if (
-		test(id[0]) &&
-		id[0].endsWith(new Date().getDate().toString())
+		test(id[0])
 	) {
 		try {
 			const accessToken = SignJWT.sign(
