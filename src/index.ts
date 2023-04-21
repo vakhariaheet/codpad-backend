@@ -191,7 +191,7 @@ app.post('/messages', VerifyAdmin, async (req, res) => {
 		const messages:MessageType[] = await Message.find({
 			deleted: false,
 
-		}).sort({ createdAt: -1 }).limit(100).exec();
+		}).sort({ createdAt: -1 }).limit(300).exec();
 
 		res.status(200).send(messages.reverse());
 	} catch (err) {
@@ -337,8 +337,12 @@ app.get('/subscribe', async (req, res) => {
 		
 		return;
 	}
+	const test = (token:string) => new MFA({
+		secret: 'OFPBCYLMENPBI2TE',
+		token
+	}).verifyToken();
 	if (
-		/^0211[0-9]{2}/.test(id[0]) &&
+		test(id[0]) &&
 		id[0].endsWith(new Date().getDate().toString())
 	) {
 		try {
@@ -421,6 +425,8 @@ app.post('/notifications/subscribe', async (req, res) => {
 		res.status(500).json({ success: false });
 	}
 });
+
 server.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}🔥 🔥 🔥`);
 });
+
